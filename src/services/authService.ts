@@ -194,9 +194,14 @@ export const loginUser = async (userData: LoginData): Promise<TokenResponse> => 
 
     console.log('Inserting refresh token for user:', user.id, 'Token:', refreshToken);
     try {
+        // await conn.execute<ResultSetHeader>(
+        //     'INSERT INTO refresh_tokens (user_id, token) VALUES (?, ?)',
+        //     [user.id, refreshToken]
+        // );
         await conn.execute<ResultSetHeader>(
-            'INSERT INTO refresh_tokens (user_id, token) VALUES (?, ?)',
-            [user.id, refreshToken]
+            `INSERT INTO auth_tokens (id, user_id, access_token, refresh_token)
+   VALUES (?, ?, ?, ?)`,
+            [ulid(), user.id, accessToken, refreshToken]
         );
         console.log('Refresh token inserted successfully');
     } catch (insertError: any) {
