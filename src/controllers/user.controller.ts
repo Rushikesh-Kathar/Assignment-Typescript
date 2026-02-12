@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { registerUser, loginUser, refreshToken, revokeUser } from '../services/authService.js';
-import { getAllUsers, getUserById, updateUserService } from '../services/userService.js';
+import { getAllUsers, getUserById, updateUserService, deleteUserService } from '../services/userService.js';
 import { ProtectedRequest } from '../types/app-request.js';
-
+import { defineAbilitiesFor } from '../casl/authrbac.js';
+import { subject } from "@casl/ability";
 
 export const registerUserController = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -52,24 +53,20 @@ export const loginUserController = async (req: Request, res: Response): Promise<
 export const userGetter = async (req: Request, res: Response): Promise<void> => {
     try {
         const user = (req as any).user;
-
-        // Check authentication first
         if (!user) {
             res.status(401).json({ message: "Unauthorized" });
             return;
         }
-
+        const ability = defineAbilitiesFor(user);
         let result;
-
-        // Role-based data access
-        if (user.role === "admin" || user.role === "manager" || user.role === "supervisor" || user.role === "SuperAdmin") {
+        if (ability.can('read', 'User')) {
+            // If user can read all users (admin), return all
             result = await getAllUsers();
         } else {
+            // Otherwise, only return their own user
             result = await getUserById(user.id);
         }
-
         res.status(200).json(result);
-
     } catch (error: any) {
         console.error(error);
         res.status(500).json({ error: error.message });
@@ -177,12 +174,25 @@ export const updateUserController = async (
     res: Response
 ): Promise<void> => {
     try {
-        const userId = Number(req.params.id);
+        const userId = req.params.id;
         const loggedInUser = (req as any).user;
+        console.log("UserId rom update user controller", userId);
+        const ability = defineAbilitiesFor(loggedInUser);
+
+        const targetUser = await getUserById(userId);
+
+        if (!targetUser) {
+            res.status(404).json({ message: "User not found" });
+            return;
+        }
+
+        if (ability.cannot("update", subject("User", targetUser) as any)) {
+            res.status(403).json({ message: "Forbidden" });
+            return;
+        }
 
         const updatedUser = await updateUserService(
             userId,
-            loggedInUser,
             req.body
         );
 
@@ -192,22 +202,54 @@ export const updateUserController = async (
         });
 
     } catch (error: any) {
-        if (error.message === "Access denied" || error.message === "You cannot change role") {
-            res.status(403).json({ message: error.message });
+        if (error.message === "No fields to update") {
+            res.status(400).json({ message: error.message });
             return;
         }
-
         if (error.message === "User not found") {
             res.status(404).json({ message: error.message });
             return;
         }
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
 
-        if (error.message === "No fields to update") {
-            res.status(400).json({ message: error.message });
+
+export const deleteUserController = async (
+    req: Request<{ id: string }>,
+    res: Response
+): Promise<void> => {
+    try {
+        const userId = req.params.id;
+        const loggedInUser = (req as any).user;
+
+        const ability = defineAbilitiesFor(loggedInUser);
+
+        const targetUser = await getUserById(userId);
+
+        if (!targetUser) {
+            res.status(404).json({ message: "User not found" });
+            return;
+        }
+
+        // CASL permission check
+        if (ability.cannot("delete", subject("User", targetUser) as any)) {
+            res.status(403).json({ message: "Forbidden" });
+            return;
+        }
+
+        await deleteUserService(userId);
+
+        res.status(200).json({
+            message: "User deleted successfully"
+        });
+
+    } catch (error: any) {
+        if (error.message === "User not found") {
+            res.status(404).json({ message: error.message });
             return;
         }
 
         res.status(500).json({ message: "Internal server error" });
     }
 };
-

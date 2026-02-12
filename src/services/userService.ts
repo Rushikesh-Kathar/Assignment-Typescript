@@ -17,32 +17,26 @@ export const getAllUsers = async (): Promise<UserRecord[]> => {
     );
     return rows;
 };
-export const getUserById = async (id: string): Promise<UserRecord[]> => {
-    const [rows] = await conn.execute<UserRecord[]>(
-        'SELECT id, name, email, age, mobile FROM users WHERE id = ?',
+export const getUserById = async (id: string): Promise<UserRecord | null> => {
+    const connection = await conn.getConnection();
+
+    const [rows] = await connection.execute<UserRecord[]>(
+        "SELECT id, name, email, age, mobile, roleId FROM users WHERE id = ?",
         [id]
     );
-    return rows;
+
+
+    return rows.length ? rows[0]! : null;
+
 };
 
 export const updateUserService = async (
-    userId: number,
-    loggedInUser: any,
+    userId: string,
     userData: UpdateUserData
 ) => {
     const connection = await conn.getConnection();
 
     try {
-        // RBAC: admin can update anyone, user only self
-        if (loggedInUser.role !== "admin" && loggedInUser.id !== userId) {
-            throw new Error("Access denied");
-        }
-
-        // normal user cannot change role
-        if (loggedInUser.role !== "admin" && userData.roleId) {
-            throw new Error("You cannot change role");
-        }
-
         const fields: string[] = [];
         const values: any[] = [];
 
@@ -100,3 +94,23 @@ export const updateUserService = async (
         connection.release();
     }
 };
+
+export const deleteUserService = async (userId: string) => {
+    const connection = await conn.getConnection();
+
+    try {
+        const [result]: any = await connection.execute(
+            "DELETE FROM users WHERE id = ?",
+            [userId]
+        );
+
+        if (result.affectedRows === 0) {
+            throw new Error("User not found");
+        }
+
+        return true;
+    } finally {
+        connection.release();
+    }
+};
+
