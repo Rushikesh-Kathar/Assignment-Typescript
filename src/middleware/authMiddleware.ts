@@ -44,6 +44,7 @@ export const verifytoken = async (req: Request, res: Response, next: NextFunctio
                 email: decoded.email,
                 role: decoded.role || ''
             };
+            console.log('Decoded token:', decoded);
             next();
         } catch (err) {
             console.log(err);

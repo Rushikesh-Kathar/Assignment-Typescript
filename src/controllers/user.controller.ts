@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { registerUser, loginUser, refreshToken, revokeUser } from '../services/authService.js';
-import { getAllUsers } from '../services/userService.js';
+import { getAllUsers, getUserById, updateUserService } from '../services/userService.js';
 import { ProtectedRequest } from '../types/app-request.js';
 
 
@@ -51,8 +51,25 @@ export const loginUserController = async (req: Request, res: Response): Promise<
 
 export const userGetter = async (req: Request, res: Response): Promise<void> => {
     try {
-        const users = await getAllUsers();
-        res.status(200).json(users);
+        const user = (req as any).user;
+
+        // Check authentication first
+        if (!user) {
+            res.status(401).json({ message: "Unauthorized" });
+            return;
+        }
+
+        let result;
+
+        // Role-based data access
+        if (user.role === "admin" || user.role === "manager" || user.role === "supervisor" || user.role === "SuperAdmin") {
+            result = await getAllUsers();
+        } else {
+            result = await getUserById(user.id);
+        }
+
+        res.status(200).json(result);
+
     } catch (error: any) {
         console.error(error);
         res.status(500).json({ error: error.message });
@@ -154,3 +171,43 @@ export const userController = async (
         res.status(500).json({ error: error.message });
     }
 };
+
+export const updateUserController = async (
+    req: Request<{ id: string }>,
+    res: Response
+): Promise<void> => {
+    try {
+        const userId = Number(req.params.id);
+        const loggedInUser = (req as any).user;
+
+        const updatedUser = await updateUserService(
+            userId,
+            loggedInUser,
+            req.body
+        );
+
+        res.status(200).json({
+            message: "User updated successfully",
+            data: updatedUser
+        });
+
+    } catch (error: any) {
+        if (error.message === "Access denied" || error.message === "You cannot change role") {
+            res.status(403).json({ message: error.message });
+            return;
+        }
+
+        if (error.message === "User not found") {
+            res.status(404).json({ message: error.message });
+            return;
+        }
+
+        if (error.message === "No fields to update") {
+            res.status(400).json({ message: error.message });
+            return;
+        }
+
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
