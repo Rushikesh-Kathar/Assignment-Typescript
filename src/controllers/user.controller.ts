@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
 import { registerUser, loginUser, refreshToken, revokeUser } from '../services/authService.js';
 import { getAllUsers, getUserById, updateUserService, deleteUserService } from '../services/userService.js';
-import { ProtectedRequest } from '../types/app-request.js';
-import { defineAbilitiesFor } from '../casl/authrbac.js';
-import { subject } from "@casl/ability";
+import { canUpdateUser, canDeleteUser } from '../middleware/hasAbility.js';
 
 export const registerUserController = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -57,16 +55,14 @@ export const userGetter = async (req: Request, res: Response): Promise<void> => 
             res.status(401).json({ message: "Unauthorized" });
             return;
         }
-        const ability = defineAbilitiesFor(user);
-        let result;
-        if (ability.can('read', 'User')) {
-            // If user can read all users (admin), return all
-            result = await getAllUsers();
+        // Admins get all users, others get only their own user
+        if (user.role === 'admin') {
+            const result = await getAllUsers();
+            res.status(200).json(result);
         } else {
-            // Otherwise, only return their own user
-            result = await getUserById(user.id);
+            const result = await getUserById(user.id);
+            res.status(200).json(result);
         }
-        res.status(200).json(result);
     } catch (error: any) {
         console.error(error);
         res.status(500).json({ error: error.message });
@@ -104,71 +100,6 @@ export const revokeUserController = async (req: Request, res: Response): Promise
 };
 
 
-export const adminController = async (
-    req: ProtectedRequest,
-    res: Response
-): Promise<void> => {
-    try {
-
-        if (!req.user) {
-            res.status(401).json({ message: "Unauthorized" });
-            return;
-        }
-
-        if (req.user.role !== "admin") {
-            res.status(403).json({ message: "Access denied" });
-            return;
-        }
-        if (req.user.role !== "admin") {
-            res.status(403).json({ message: "Access denied. Admins only." });
-            return;
-        }
-
-        res.json({ message: `Welcome Admin ${req.user.email}!` });
-    } catch (error: any) {
-        console.log(error);
-        res.status(500).json({ error: error.message });
-    }
-};
-
-export const managerController = async (
-    req: ProtectedRequest,
-    res: Response
-): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ message: "Unauthorized" });
-            return;
-        }
-
-        if (req.user.role !== "manager") {
-            res.status(403).json({ message: "Access denied. Managers only." });
-            return;
-        }
-
-        res.json({ message: `Welcome Manager ${req.user.email}!` });
-    } catch (error: any) {
-        console.log(error);
-        res.status(500).json({ error: error.message });
-    }
-};
-
-export const userController = async (
-    req: ProtectedRequest,
-    res: Response
-): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ message: "Unauthorized" });
-            return;
-        }
-        res.json({ message: `Welcome User ${req.user.email}!` });
-    } catch (error: any) {
-        console.log(error);
-        res.status(500).json({ error: error.message });
-    }
-};
-
 export const updateUserController = async (
     req: Request<{ id: string }>,
     res: Response
@@ -176,31 +107,13 @@ export const updateUserController = async (
     try {
         const userId = req.params.id;
         const loggedInUser = (req as any).user;
-        console.log("UserId rom update user controller", userId);
-        const ability = defineAbilitiesFor(loggedInUser);
-
-        const targetUser = await getUserById(userId);
-
-        if (!targetUser) {
-            res.status(404).json({ message: "User not found" });
-            return;
-        }
-
-        if (ability.cannot("update", subject("User", targetUser) as any)) {
-            res.status(403).json({ message: "Forbidden" });
-            return;
-        }
-
-        const updatedUser = await updateUserService(
-            userId,
-            req.body
-        );
-
+        // Use canUpdateUser helper for CASL check
+        await canUpdateUser(loggedInUser, userId);
+        const updatedUser = await updateUserService(userId, req.body);
         res.status(200).json({
             message: "User updated successfully",
             data: updatedUser
         });
-
     } catch (error: any) {
         if (error.message === "No fields to update") {
             res.status(400).json({ message: error.message });
@@ -208,6 +121,10 @@ export const updateUserController = async (
         }
         if (error.message === "User not found") {
             res.status(404).json({ message: error.message });
+            return;
+        }
+        if (error.message === "Forbidden") {
+            res.status(403).json({ message: error.message });
             return;
         }
         res.status(500).json({ message: "Internal server error" });
@@ -222,34 +139,21 @@ export const deleteUserController = async (
     try {
         const userId = req.params.id;
         const loggedInUser = (req as any).user;
-
-        const ability = defineAbilitiesFor(loggedInUser);
-
-        const targetUser = await getUserById(userId);
-
-        if (!targetUser) {
-            res.status(404).json({ message: "User not found" });
-            return;
-        }
-
-        // CASL permission check
-        if (ability.cannot("delete", subject("User", targetUser) as any)) {
-            res.status(403).json({ message: "Forbidden" });
-            return;
-        }
-
+        // Use canDeleteUser helper for CASL check
+        await canDeleteUser(loggedInUser, userId);
         await deleteUserService(userId);
-
         res.status(200).json({
             message: "User deleted successfully"
         });
-
     } catch (error: any) {
         if (error.message === "User not found") {
             res.status(404).json({ message: error.message });
             return;
         }
-
+        if (error.message === "Forbidden") {
+            res.status(403).json({ message: error.message });
+            return;
+        }
         res.status(500).json({ message: "Internal server error" });
     }
 };

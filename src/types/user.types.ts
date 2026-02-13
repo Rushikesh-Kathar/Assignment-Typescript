@@ -9,13 +9,23 @@ export interface UpdateUserData {
 }
 
 // Add User interface for CASL RBAC
-export interface User {
-    id: string;
-    name: string;
-    email: string;
+// export interface User {
+//     id: string;
+//     name: string;
+//     email: string;
+//     age?: number;
+//     mobile?: number;
+//     teamId?: string;
+//     roleId?: string;
+//     role: string;
+// }
+export class User {
+    id!: string;
+    name!: string;
+    email!: string;
     age?: number;
     mobile?: number;
     teamId?: string;
     roleId?: string;
-    role: string;
+    role!: string;
 }

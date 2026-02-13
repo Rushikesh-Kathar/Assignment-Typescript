@@ -3,7 +3,7 @@ import { RowDataPacket } from 'mysql2/promise';
 import { UpdateUserData } from "../types/user.types.js";
 import bcrypt from "bcrypt";
 
-interface UserRecord extends RowDataPacket {
+export interface UserRecord extends RowDataPacket {
     id: string;
     name: string;
     email: string;
