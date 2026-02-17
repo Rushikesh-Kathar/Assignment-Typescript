@@ -1,6 +1,7 @@
 import express, { Express } from 'express';
 import dotenv from 'dotenv';
 import userRouter from './routes/user.routes.js';
+import { rateLimiter } from './middleware/ratelimitter.js';
 
 dotenv.config();
 
@@ -9,6 +10,7 @@ const port: string | number = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(rateLimiter)
 app.use('/', userRouter);
 
 app.listen(port, () => {
