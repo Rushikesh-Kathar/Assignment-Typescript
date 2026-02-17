@@ -13,7 +13,7 @@ interface UserData {
     email: string;
     age?: number;
     password: string;
-    mobile?: string;
+    mobile?: number;
     teamId: string;
     roleId: string;
 }

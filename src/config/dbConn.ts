@@ -11,7 +11,7 @@ const poolOptions: PoolOptions = {
     database: process.env.DATABASE || ''
 };
 
-export const conn: Pool = await mysql.createPool(poolOptions);
+export const conn: Pool = mysql.createPool(poolOptions);
 
 conn.getConnection()
     .then((connection) => {
